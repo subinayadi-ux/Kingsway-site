@@ -15,6 +15,14 @@
     $("#admin-form").hidden = true;
     $("#admin-view").hidden = false;
 
+    const when = iso => new Date(iso).toLocaleString("en-AU", { timeZone: "Australia/Sydney", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+    const qt = $("#quotes-table");
+    qt.innerHTML = data.quotes.length ? `
+      <thead><tr><th>Received</th><th>Ref</th><th>Customer</th><th>Phone</th><th>Car</th><th>What they need</th><th>Estimate shown</th></tr></thead>
+      <tbody>${data.quotes.map(q => `<tr><td>${when(q.createdAt)}</td><td>${esc(q.ref)}</td><td>${esc(q.firstName)}</td><td>${tel(q.phone)}</td>
+        <td>${esc(q.vehicle)}</td><td>${esc(q.details)}</td><td>${esc(q.estimate) || "None"}</td></tr>`).join("")}</tbody>`
+      : "<tbody><tr><td>No quote requests yet.</td></tr></tbody>";
+
     const bt = $("#bookings-table");
     bt.innerHTML = data.bookings.length ? `
       <thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Phone</th><th>Service</th><th>Car</th><th>Notes</th><th>Status</th></tr></thead>

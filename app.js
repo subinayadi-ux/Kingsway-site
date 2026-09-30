@@ -173,7 +173,7 @@
     return m;
   }
 
-  addMsg("bot", "G'day! I can answer questions about repairs, performance work and servicing, or take you anywhere on the site. Try \u201cbook a service\u201d or \u201chow does dyno testing work?\u201d");
+  addMsg("bot", "G'day! Ask me what a job costs or how long it takes, describe a problem and I'll pass it to the workshop, or ask me to take you anywhere on the site.");
 
   // Open on the home page by default (not on small screens, where it would cover the content)
   if ((location.hash === "" || location.hash === "#home") && innerWidth > 860) open();
@@ -206,7 +206,9 @@
     busy = false; A.dataset.state = "";
     const reply = (data && data.reply) || "Sorry, I didn't catch that. Could you rephrase?";
     addMsg("bot", reply);
-    history_.push({ role: "assistant", content: reply });
+    if (data && data.estimate) addEstimate(data.estimate);
+    if (data && data.quote) addMsg("note", `Request sent to the workshop. Reference ${data.quote.ref}`);
+    history_.push({ role: "assistant", content: reply + (data && data.historyNote ? "\n" + data.historyNote : "") });
     speak(reply);
     if (data && data.action) runAction(data.action);
   }
@@ -244,6 +246,42 @@
       return { reply: `I can't reach the assistant service right now, but here's ${label}.`, action: { type: "navigate", section: hit[0] } };
     }
     return { reply: "I can't reach the assistant service right now. Give the workshop a call and the team will help." };
+  }
+
+
+  /* Estimate card */
+  const aud = n => "$" + Math.round(n).toLocaleString("en-AU");
+  const range = (a, b) => (b && b !== a ? `${aud(a)} to ${aud(b)}` : b ? aud(a) : `from ${aud(a)}`);
+  const day = ymd => new Date(ymd + "T00:00:00Z").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  function addEstimate(e) {
+    const t = e.time;
+    const span = t.min === t.max ? `${t.min}` : `${t.min} to ${t.max}`;
+    const howLong = t.unit === "hours" ? `Same day, about ${span} hours in the workshop`
+      : t.unit === "days" ? `About ${span} working day${t.max > 1 ? "s" : ""}`
+      : `About ${span} weeks`;
+    const when = t.readyFrom === t.readyTo
+      ? `Drop off ${day(t.dropOff)}, likely ready ${t.readyFrom === t.dropOff ? "the same day" : day(t.readyFrom)}`
+      : `Drop off ${day(t.dropOff)}, likely ready between ${day(t.readyFrom)} and ${day(t.readyTo)}`;
+    const el = document.createElement("div");
+    el.className = "est";
+    el.innerHTML = `
+      <p class="est-tag">Rough estimate</p>
+      <p class="est-title">${esc(e.title)}</p>
+      <p class="est-price">${e.totalMax ? `${aud(e.totalMin)}<span> to </span>${aud(e.totalMax)}` : `<span>From </span>${aud(e.totalMin)}`}</p>
+      ${e.lines.length > 1 ? `<ul class="est-lines">${e.lines.map(l => `<li><span>${esc(l.label)}</span><span>${range(l.min, l.max)}</span></li>`).join("")}</ul>` : ""}
+      <div class="est-time"><strong>${howLong}</strong><span>${when}</span></div>
+      ${e.assumptions.length ? `<p class="est-note"><strong>Based on:</strong> ${e.assumptions.map(esc).join("; ")}</p>` : ""}
+      ${e.notIncluded.length ? `<p class="est-note"><strong>Not included:</strong> ${e.notIncluded.map(esc).join("; ")}</p>` : ""}
+      ${e.sample ? `<p class="est-sample">Sample figures. The workshop hasn't confirmed its prices yet.</p>` : ""}
+      <p class="est-foot">Includes GST. A guide, not a quote: we confirm the price once we've seen the car.</p>
+      <div class="est-actions">
+        ${e.category === "servicing" ? `<a class="est-btn" href="/account#book">Book a service</a>` : ""}
+        <button type="button" class="est-btn ${e.category === "servicing" ? "ghost" : ""}" data-est-ask>Get a firm quote</button>
+      </div>`;
+    el.querySelector("[data-est-ask]").addEventListener("click", () => send("I'd like a firm quote for this."));
+    log.appendChild(el);
+    el.scrollIntoView({ block: "nearest" });
   }
 
   form.addEventListener("submit", e => { e.preventDefault(); send(input.value); });
